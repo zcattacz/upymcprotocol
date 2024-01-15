@@ -1,3 +1,12 @@
+# upymcprotocol
+A fork of pymcprotocol tested on micropython unix port (only e3type tested with FX5U, other sub protocols untouched, untested, might broken). 
+
+Changes:
+- Adapted for micropython
+- Add `randomread_bytes(self, word_devices, dword_devices)`
+
+All credit goes to original author.
+
 # pymcprotocol
 MC protocol(MELSEC Communication Protocol) implementation by Python.  
 MC protocol enables you to operate PLC from computer.
