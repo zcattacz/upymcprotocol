@@ -597,7 +597,7 @@ class Type3E:
 
         return None
 
-    def randomread(self, word_devices, dword_devices):
+    def _randomread(self, word_devices, dword_devices):
         """read word units and dword units randomly.
         Moniter condition does not support.
 
@@ -635,6 +635,10 @@ class Type3E:
         recv = self._recv()
         self._check_cmdanswer(recv)
         data_index = self._get_answerdata_index()
+        return recv, data_index
+
+    def randomread(self, word_devices, dword_devices):
+        recv, data_index = self._randomread(word_devices, dword_devices)
         word_values= []
         dword_values= []
         for word_device in word_devices:
@@ -643,6 +647,20 @@ class Type3E:
             data_index += self._wordsize
         for dword_device in dword_devices:
             dwordvalue = self._decode(recv[data_index:data_index+self._wordsize*2], sfmt="l")
+            dword_values.append(dwordvalue)
+            data_index += self._wordsize*2
+        return word_values, dword_values
+
+    def randomread_bytes(self, word_devices, dword_devices):
+        recv, data_index = self._randomread(word_devices, dword_devices)
+        word_values= []
+        dword_values= []
+        for word_device in word_devices:
+            wordvalue = recv[data_index:data_index+self._wordsize]
+            word_values.append(wordvalue)
+            data_index += self._wordsize
+        for dword_device in dword_devices:
+            dwordvalue = recv[data_index:data_index+self._wordsize*2]
             dword_values.append(dwordvalue)
             data_index += self._wordsize*2
         return word_values, dword_values
