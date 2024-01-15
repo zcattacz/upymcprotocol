@@ -4,6 +4,7 @@
 import re
 import time
 import usocket
+import struct
 import binascii
 from . import mcprotocolerror
 from . import mcprotocolconst as const
@@ -14,14 +15,14 @@ def isascii(text):
     """
     return all(ord(c) < 128 for c in text)
 
-def twos_comp(val, mode="short"):
+def twos_comp(val, sfmt="h"):
     """compute the 2's complement of int value val
     """
-    if mode =="byte":
+    if sfmt =="c":
         bit = 8
-    elif mode =="short":
+    elif sfmt =="h":
         bit = 16
-    elif mode== "long":
+    elif sfmt== "l":
         bit = 32
     else:
         raise ValueError("cannnot calculate 2's complement")
@@ -286,13 +287,13 @@ class Type3E:
              mc_data += self.subheader.to_bytes(2, "big")
         else:
             mc_data += format(self.subheader, "x").ljust(4, "0").upper().encode()
-        mc_data += self._encode_value(self.network, "byte")
-        mc_data += self._encode_value(self.pc, "byte")
-        mc_data += self._encode_value(self.dest_moduleio, "short")
-        mc_data += self._encode_value(self.dest_modulesta, "byte")
+        mc_data += self._encode_value(self.network, "B")
+        mc_data += self._encode_value(self.pc, "B")
+        mc_data += self._encode_value(self.dest_moduleio, "H")
+        mc_data += self._encode_value(self.dest_modulesta, "B")
         #add self.timer size
-        mc_data += self._encode_value(self._wordsize + len(requestdata), "short")
-        mc_data += self._encode_value(self.timer, "short")
+        mc_data += self._encode_value(self._wordsize + len(requestdata), "H")
+        mc_data += self._encode_value(self.timer, "H")
         mc_data += requestdata
         return mc_data
 
@@ -308,8 +309,8 @@ class Type3E:
 
         """
         command_data = bytes()
-        command_data += self._encode_value(command, "short")
-        command_data += self._encode_value(subcommand, "short")
+        command_data += self._encode_value(cmd, "H")
+        command_data += self._encode_value(subcmd, "H")
         return command_data
     
     def _make_devicedata(self, device):
@@ -351,13 +352,12 @@ class Type3E:
                 device_data += devicenum.rjust(6, "0").upper().encode()
         return device_data
 
-    def _encode_value(self, value, mode="short", isSigned=False):
+    def _encode_value(self, value, sfmt="H"):
         """encode mc protocol value data to byte.
 
         Args: 
             value(int):   readsize, write value, and so on.
-            mode(str):    value type.
-            isSigned(bool): convert as sigend value
+            sfmt(str):      b/h/l char(byte)/short/long, cap=unsigned
 
         Returns:
             value_byte(bytes):  value data
@@ -365,42 +365,39 @@ class Type3E:
         """
         try:
             if self.commtype == const.COMMTYPE_BINARY:
-                if mode == "byte":
-                    value_byte = value.to_bytes(1, "little", signed=isSigned)
-                elif mode == "short":
-                    value_byte = value.to_bytes(2, "little", signed=isSigned)
-                elif mode == "long":
-                    value_byte = value.to_bytes(4, "little", signed=isSigned)
+                if sfmt in "bhlBHL":
+                    value_byte = struct.pack("<"+sfmt, value)
                 else: 
-                    raise ValueError("Please input value type")
+                    raise ValueError(f"_encode_value wrong sfmt {sfmt}")
             else:
                 #check value range by to_bytes
                 #convert to unsigned value
-                if mode == "byte":
-                    value.to_bytes(1, "little", signed=isSigned)
+                # kwarg signed:bool is not supported on mpy, removed
+                if sfmt == "B":
+                    value.to_bytes(1, "little")
                     value = value & 0xff
                     value_byte = format(value, "x").rjust(2, "0").upper().encode()
-                elif mode == "short":
-                    value.to_bytes(2, "little", signed=isSigned)
+                elif sfmt == "H":
+                    value.to_bytes(2, "little")
                     value = value & 0xffff
                     value_byte = format(value, "x").rjust(4, "0").upper().encode()
-                elif mode == "long":
-                    value.to_bytes(4, "little", signed=isSigned)
+                elif sfmt == "L":
+                    value.to_bytes(4, "little")
                     value = value & 0xffffffff
                     value_byte = format(value, "x").rjust(8, "0").upper().encode()
                 else: 
-                    raise ValueError("Please input value type")
-        except:
-            raise ValueError("Exceeeded Device value range")
+                    raise ValueError(f"_encode_value missing/wrong sfmt ({sfmt})")
+        except Exception as ex:
+            print("_encode_value error", type(ex))
+            raise ex
         return value_byte
 
-    def _decode_value(self, byte, mode="short", isSigned=False):
+    def _decode_value(self, byte, sfmt="H"):
         """decode byte to value
 
         Args: 
             byte(bytes):    readsize, write value, and so on.
-            mode(str):      value type.
-            isSigned(bool): convert as sigend value  
+            sfmt(str):      b/h/l char(byte)/short/long, cap=unsigned
 
         Returns:
             value_data(int):  value data
@@ -408,13 +405,17 @@ class Type3E:
         """
         try:
             if self.commtype == const.COMMTYPE_BINARY:
-                value =int.from_bytes(byte, "little", signed = isSigned)
+                if sfmt in "bhlBHL":
+                    value = struct.unpack("<"+sfmt, byte)[0]
+                else: 
+                    raise ValueError(f"_decode_value wrong sfmt {sfmt}")
             else:
                 value = int(byte.decode(), 16)
-                if isSigned:
-                    value = twos_comp(value, mode)
-        except:
-            raise ValueError("Could not decode byte to value")
+                if sfmt in "bhl":
+                    value = twos_comp(value, sfmt)
+        except Exception as ex:
+            print("_decode_value error", type(ex))
+            raise ex
         return value
         
     def _check_cmdanswer(self, recv_data):
@@ -422,7 +423,7 @@ class Type3E:
 
         """
         answerstatus_index = self._get_answerstatus_index()
-        answerstatus = self._decode_value(recv_data[answerstatus_index:answerstatus_index+self._wordsize], "short")
+        answerstatus = self._decode_value(recv[answerstatus_index:answerstatus_index+self._wordsize], "H")
         mcprotocolerror.check_mcprotocol_error(answerstatus)
         return None
 
@@ -458,7 +459,7 @@ class Type3E:
         word_values = []
         data_index = self._get_answerdata_index()
         for _ in range(readsize):
-            wordvalue = self._decode_value(recv_data[data_index:data_index+self._wordsize], mode="short", isSigned=True)
+            wordvalue = self._decode_value(recv[data_index:data_index+self._wordsize], sfmt="h")
             word_values.append(wordvalue)
             data_index += self._wordsize
         return word_values
@@ -533,7 +534,7 @@ class Type3E:
         request_data += self._make_devicedata(headdevice)
         request_data += self._encode_value(write_size)
         for value in values:
-            request_data += self._encode_value(value, isSigned=True)
+            request_data += self._encode_value(value, sfmt="h")
         send_data = self._make_senddata(request_data)
 
         #send mc data
@@ -672,15 +673,15 @@ class Type3E:
             subcommand = 0x0000
         
         request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(word_size, mode="byte")
-        request_data += self._encode_value(dword_size, mode="byte")
+        request_data += self._make_commanddata(cmd, subcmd)
+        request_data += self._encode_value(word_size, sfmt="B")
+        request_data += self._encode_value(dword_size, sfmt="B")
         for word_device, word_value in zip(word_devices, word_values):
             request_data += self._make_devicedata(word_device)
-            request_data += self._encode_value(word_value, mode="short", isSigned=True)
+            request_data += self._encode_value(word_value, sfmt="h")
         for dword_device, dword_value in zip(dword_devices, dword_values):
             request_data += self._make_devicedata(dword_device)   
-            request_data += self._encode_value(dword_value, mode="long", isSigned=True)     
+            request_data += self._encode_value(dword_value, sfmt="l")     
         send_data = self._make_senddata(request_data)
 
         #send mc data
@@ -714,14 +715,14 @@ class Type3E:
         
         request_data = bytes()
         request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(write_size, mode="byte")
+        request_data += self._encode_value(write_size, sfmt="B")
         for bit_device, value in zip(bit_devices, values):
             request_data += self._make_devicedata(bit_device)
             #byte value for iQ-R requires 2 byte data
             if self.plctype == const.iQR_SERIES:
-                request_data += self._encode_value(value, mode="short", isSigned=True)
+                request_data += self._encode_value(value, sfmt="h")
             else:
-                request_data += self._encode_value(value, mode="byte", isSigned=True)
+                request_data += self._encode_value(value, sfmt="b")
         send_data = self._make_senddata(request_data)
                     
         #send mc data
@@ -755,9 +756,9 @@ class Type3E:
           
         request_data = bytes()
         request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(mode, mode="short")
-        request_data += self._encode_value(clear_mode, mode="byte")
-        request_data += self._encode_value(0, mode="byte")
+        request_data += self._encode_value(mode, sfmt="H")
+        request_data += self._encode_value(clear_mode, sfmt="B")
+        request_data += self._encode_value(0, sfmt="B")
         send_data = self._make_senddata(request_data)
 
         #send mc data
@@ -777,7 +778,7 @@ class Type3E:
 
         request_data = bytes()
         request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(0x0001, mode="short") #fixed value
+        request_data += self._encode_value(0x0001, sfmt="H") #fixed value
         send_data = self._make_senddata(request_data)
 
         #send mc data
@@ -807,7 +808,7 @@ class Type3E:
           
         request_data = bytes()
         request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(mode, mode="short")
+        request_data += self._encode_value(mode, sfmt="H")
         send_data = self._make_senddata(request_data)
 
         #send mc data
@@ -827,7 +828,7 @@ class Type3E:
 
         request_data = bytes()
         request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(0x0001, mode="short") #fixed value 
+        request_data += self._encode_value(0x0001, sfmt="H") #fixed value 
         send_data = self._make_senddata(request_data)
 
         #send mc data
@@ -849,7 +850,7 @@ class Type3E:
 
         request_data = bytes()
         request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(0x0001, mode="short") #fixed value
+        request_data += self._encode_value(0x0001, sfmt="H") #fixed value
         send_data = self._make_senddata(request_data)
 
         #send mc data
@@ -926,7 +927,7 @@ class Type3E:
         subcommand = 0x0000
         request_data = bytes()
         request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(len(password), mode="short") 
+        request_data += self._encode_value(len(password), sfmt="H") 
         request_data += password.encode()
 
         send_data = self._make_senddata(request_data)
@@ -961,7 +962,7 @@ class Type3E:
 
         request_data = bytes()
         request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(len(password), mode="short") 
+        request_data += self._encode_value(len(password), sfmt="H") 
         request_data += password.encode()
 
         send_data = self._make_senddata(request_data)
@@ -995,7 +996,7 @@ class Type3E:
 
         request_data = bytes()
         request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(len(echo_data), mode="short") 
+        request_data += self._encode_value(len(echo_data), sfmt="H") 
         request_data += echo_data.encode()
 
         send_data = self._make_senddata(request_data)
