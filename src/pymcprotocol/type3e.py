@@ -457,11 +457,11 @@ class Type3E:
         self._check_cmdanswer(recv)
 
         word_values = []
-        data_index = self._get_answerdata_index()
+        idx = self._get_answerdata_index()
         for _ in range(readsize):
-            wordvalue = self._decode(recv[data_index:data_index+self._wordsize], sfmt="h")
+            wordvalue = self._decode(recv[idx:idx+self._wordsize], sfmt="h")
             word_values.append(wordvalue)
-            data_index += self._wordsize
+            idx += self._wordsize
         return word_values
 
     def batchread_bitunits(self, headdevice, readsize):
@@ -496,8 +496,8 @@ class Type3E:
         bit_values = []
         if self.commtype == const.COMMTYPE_BINARY:
             for i in range(readsize):
-                data_index = i//2 + self._get_answerdata_index()
-                value = int.from_bytes(recv[data_index:data_index+1], "little")
+                idx = i//2 + self._get_answerdata_index()
+                value = int.from_bytes(recv[idx:idx+1], "little")
                 #if i//2==0, bit value is 4th bit
                 if(i%2==0):
                     bitvalue = 1 if value & (1<<4) else 0
@@ -505,12 +505,12 @@ class Type3E:
                     bitvalue = 1 if value & (1<<0) else 0
                 bit_values.append(bitvalue)
         else:
-            data_index = self._get_answerdata_index()
+            idx = self._get_answerdata_index()
             byte_range = 1
             for i in range(readsize):
-                bitvalue = int(recv[data_index:data_index+byte_range].decode())
+                bitvalue = int(recv[idx:idx+byte_range].decode())
                 bit_values.append(bitvalue)
-                data_index += byte_range
+                idx += byte_range
         return bit_values
 
     def batchwrite_wordunits(self, headdevice, values):
@@ -634,35 +634,35 @@ class Type3E:
         #reciev mc data
         recv = self._recv()
         self._check_cmdanswer(recv)
-        data_index = self._get_answerdata_index()
-        return recv, data_index
+        idx = self._get_answerdata_index()
+        return recv, idx
 
     def randomread(self, word_devices, dword_devices):
-        recv, data_index = self._randomread(word_devices, dword_devices)
+        recv, idx = self._randomread(word_devices, dword_devices)
         word_values= []
         dword_values= []
         for word_device in word_devices:
-            wordvalue = self._decode(recv[data_index:data_index+self._wordsize], sfmt="h")
+            wordvalue = self._decode(recv[idx:idx+self._wordsize], sfmt="h")
             word_values.append(wordvalue)
-            data_index += self._wordsize
+            idx += self._wordsize
         for dword_device in dword_devices:
-            dwordvalue = self._decode(recv[data_index:data_index+self._wordsize*2], sfmt="l")
+            dwordvalue = self._decode(recv[idx:idx+self._wordsize*2], sfmt="l")
             dword_values.append(dwordvalue)
-            data_index += self._wordsize*2
+            idx += self._wordsize*2
         return word_values, dword_values
 
     def randomread_bytes(self, word_devices, dword_devices):
-        recv, data_index = self._randomread(word_devices, dword_devices)
+        recv, idx = self._randomread(word_devices, dword_devices)
         word_values= []
         dword_values= []
         for word_device in word_devices:
-            wordvalue = recv[data_index:data_index+self._wordsize]
+            wordvalue = recv[idx:idx+self._wordsize]
             word_values.append(wordvalue)
-            data_index += self._wordsize
+            idx += self._wordsize
         for dword_device in dword_devices:
-            dwordvalue = recv[data_index:data_index+self._wordsize*2]
+            dwordvalue = recv[idx:idx+self._wordsize*2]
             dword_values.append(dwordvalue)
-            data_index += self._wordsize*2
+            idx += self._wordsize*2
         return word_values, dword_values
 
     def randomwrite(self, word_devices, word_values,
@@ -908,17 +908,17 @@ class Type3E:
         #reciev mc data
         recv = self._recv()
         self._check_cmdanswer(recv)
-        data_index = self._get_answerdata_index()
+        idx = self._get_answerdata_index()
         cpu_name_length = 16
         if self.commtype == const.COMMTYPE_BINARY:
-            cpu_type = recv[data_index:data_index+cpu_name_length].decode()
+            cpu_type = recv[idx:idx+cpu_name_length].decode()
             cpu_type = cpu_type.replace("\x20", "")
-            cpu_code = int.from_bytes(recv[data_index+cpu_name_length:], "little")
+            cpu_code = int.from_bytes(recv[idx+cpu_name_length:], "little")
             cpu_code = format(cpu_code, "x").rjust(4, "0")
         else:
-            cpu_type = recv[data_index:data_index+cpu_name_length].decode()
+            cpu_type = recv[idx:idx+cpu_name_length].decode()
             cpu_type = cpu_type.replace("\x20", "")
-            cpu_code = recv[data_index+cpu_name_length:].decode()
+            cpu_code = recv[idx+cpu_name_length:].decode()
         return cpu_type, cpu_code
 
     def remote_unlock(self, password="", request_input=False):
@@ -1025,8 +1025,8 @@ class Type3E:
         recv = self._recv()
         self._check_cmdanswer(recv)
 
-        data_index = self._get_answerdata_index()
+        idx = self._get_answerdata_index()
 
-        answer_len = self._decode(recv[data_index:data_index+self._wordsize], sfmt="H") 
-        answer = recv[data_index+self._wordsize:].decode()
+        answer_len = self._decode(recv[idx:idx+self._wordsize], sfmt="H") 
+        answer = recv[idx+self._wordsize:].decode()
         return answer_len, answer
