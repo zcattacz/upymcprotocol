@@ -156,10 +156,10 @@ class Type3E:
         """recieve mc protocol data
 
         Returns:
-            recv_data
+            recv
         """
-        recv_data = self._sock.recv(self._SOCKBUFSIZE)
-        return recv_data
+        recv = self._sock.recv(self._SOCKBUFSIZE)
+        return recv
 
     def _set_plctype(self, plctype):
         """Check PLC type. If plctype is vaild, set self.commtype.
@@ -206,7 +206,7 @@ class Type3E:
             return 22
 
     def _get_answerstatus_index(self):
-        """Get command status index from return data byte.
+        """Get cmd status index from return data byte.
         """
         if self.commtype == const.COMMTYPE_BINARY:
             return 9
@@ -287,44 +287,44 @@ class Type3E:
              mc_data += self.subheader.to_bytes(2, "big")
         else:
             mc_data += format(self.subheader, "x").ljust(4, "0").upper().encode()
-        mc_data += self._encode_value(self.network, "B")
-        mc_data += self._encode_value(self.pc, "B")
-        mc_data += self._encode_value(self.dest_moduleio, "H")
-        mc_data += self._encode_value(self.dest_modulesta, "B")
+        mc_data += self._encode(self.network, "B")
+        mc_data += self._encode(self.pc, "B")
+        mc_data += self._encode(self.dest_moduleio, "H")
+        mc_data += self._encode(self.dest_modulesta, "B")
         #add self.timer size
-        mc_data += self._encode_value(self._wordsize + len(requestdata), "H")
-        mc_data += self._encode_value(self.timer, "H")
+        mc_data += self._encode(self._wordsize + len(requestdata), "H")
+        mc_data += self._encode(self.timer, "H")
         mc_data += requestdata
         return mc_data
 
-    def _make_commanddata(self, command, subcommand):
-        """make mc protocol command and subcommand data
+    def _mk_cmd(self, cmd, subcmd):
+        """make mc protocol cmd and subcmd data
 
         Args:
-            command(int):       command code
-            subcommand(int):    subcommand code
+            cmd(int):       cmd code
+            subcmd(int):    subcmd code
 
         Returns:
-            command_data(bytes):command data
+            cmd_data(bytes):cmd data
 
         """
-        command_data = bytes()
-        command_data += self._encode_value(cmd, "H")
-        command_data += self._encode_value(subcmd, "H")
-        return command_data
+        cmd_data = bytes()
+        cmd_data += self._encode(cmd, "H")
+        cmd_data += self._encode(subcmd, "H")
+        return cmd_data
     
-    def _make_devicedata(self, device):
+    def _mk_dev(self, device):
         """make mc protocol device data. (device code and device number)
         
         Args:
             device(str): device. (ex: "D1000", "Y1")
 
         Returns:
-            device_data(bytes): device data
+            dev_data(bytes): device data
             
         """
         
-        device_data = bytes()
+        dev_data = bytes()
 
         devicetype = re.search(r"\D+", device)
         if devicetype is None:
@@ -336,23 +336,23 @@ class Type3E:
             devicecode, devicebase = const.DeviceConstants.get_binary_devicecode(self.plctype, devicetype)
             devicenum = int(get_device_number(device), devicebase)
             if self.plctype is const.iQR_SERIES:
-                device_data += devicenum.to_bytes(4, "little")
-                device_data += devicecode.to_bytes(2, "little")
+                dev_data += devicenum.to_bytes(4, "little")
+                dev_data += devicecode.to_bytes(2, "little")
             else:
-                device_data += devicenum.to_bytes(3, "little")
-                device_data += devicecode.to_bytes(1, "little")
+                dev_data += devicenum.to_bytes(3, "little")
+                dev_data += devicecode.to_bytes(1, "little")
         else:
             devicecode, devicebase = const.DeviceConstants.get_ascii_devicecode(self.plctype, devicetype)
             devicenum = str(int(get_device_number(device), devicebase))
             if self.plctype is const.iQR_SERIES:
-                device_data += devicecode.encode()
-                device_data += devicenum.rjust(8, "0").upper().encode()
+                dev_data += devicecode.encode()
+                dev_data += devicenum.rjust(8, "0").upper().encode()
             else:
-                device_data += devicecode.encode()
-                device_data += devicenum.rjust(6, "0").upper().encode()
-        return device_data
+                dev_data += devicecode.encode()
+                dev_data += devicenum.rjust(6, "0").upper().encode()
+        return dev_data
 
-    def _encode_value(self, value, sfmt="H"):
+    def _encode(self, value, sfmt="H"):
         """encode mc protocol value data to byte.
 
         Args: 
@@ -368,7 +368,7 @@ class Type3E:
                 if sfmt in "bhlBHL":
                     value_byte = struct.pack("<"+sfmt, value)
                 else: 
-                    raise ValueError(f"_encode_value wrong sfmt {sfmt}")
+                    raise ValueError(f"_encode wrong sfmt {sfmt}")
             else:
                 #check value range by to_bytes
                 #convert to unsigned value
@@ -386,13 +386,13 @@ class Type3E:
                     value = value & 0xffffffff
                     value_byte = format(value, "x").rjust(8, "0").upper().encode()
                 else: 
-                    raise ValueError(f"_encode_value missing/wrong sfmt ({sfmt})")
+                    raise ValueError(f"_encode missing/wrong sfmt ({sfmt})")
         except Exception as ex:
-            print("_encode_value error", type(ex))
+            print("_encode error", type(ex))
             raise ex
         return value_byte
 
-    def _decode_value(self, byte, sfmt="H"):
+    def _decode(self, byte, sfmt="H"):
         """decode byte to value
 
         Args: 
@@ -408,22 +408,22 @@ class Type3E:
                 if sfmt in "bhlBHL":
                     value = struct.unpack("<"+sfmt, byte)[0]
                 else: 
-                    raise ValueError(f"_decode_value wrong sfmt {sfmt}")
+                    raise ValueError(f"_decode wrong sfmt {sfmt}")
             else:
                 value = int(byte.decode(), 16)
                 if sfmt in "bhl":
                     value = twos_comp(value, sfmt)
         except Exception as ex:
-            print("_decode_value error", type(ex))
+            print("_decode error", type(ex))
             raise ex
         return value
         
-    def _check_cmdanswer(self, recv_data):
-        """check command answer. If answer status is not 0, raise error according to answer  
+    def _check_cmdanswer(self, recv):
+        """check cmd answer. If answer status is not 0, raise error according to answer  
 
         """
         answerstatus_index = self._get_answerstatus_index()
-        answerstatus = self._decode_value(recv[answerstatus_index:answerstatus_index+self._wordsize], "H")
+        answerstatus = self._decode(recv[answerstatus_index:answerstatus_index+self._wordsize], "H")
         mcprotocolerror.check_mcprotocol_error(answerstatus)
         return None
 
@@ -438,28 +438,28 @@ class Type3E:
             wordunits_values(list[int]):  word units value list
 
         """
-        command = 0x0401
+        cmd = 0x0401
         if self.plctype == const.iQR_SERIES:
-            subcommand = 0x0002
+            subcmd = 0x0002
         else:
-            subcommand = 0x0000
+            subcmd = 0x0000
         
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._make_devicedata(headdevice)
-        request_data += self._encode_value(readsize)
-        send_data = self._make_senddata(request_data)
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._mk_dev(headdevice)
+        req += self._encode(readsize)
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
 
         word_values = []
         data_index = self._get_answerdata_index()
         for _ in range(readsize):
-            wordvalue = self._decode_value(recv[data_index:data_index+self._wordsize], sfmt="h")
+            wordvalue = self._decode(recv[data_index:data_index+self._wordsize], sfmt="h")
             word_values.append(wordvalue)
             data_index += self._wordsize
         return word_values
@@ -475,29 +475,29 @@ class Type3E:
             bitunits_values(list[int]):  bit units value(0 or 1) list
 
         """
-        command = 0x0401
+        cmd = 0x0401
         if self.plctype == const.iQR_SERIES:
-            subcommand = 0x0003
+            subcmd = 0x0003
         else:
-            subcommand = 0x0001
+            subcmd = 0x0001
         
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._make_devicedata(headdevice)
-        request_data += self._encode_value(readsize)
-        send_data = self._make_senddata(request_data)
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._mk_dev(headdevice)
+        req += self._encode(readsize)
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
 
         bit_values = []
         if self.commtype == const.COMMTYPE_BINARY:
             for i in range(readsize):
                 data_index = i//2 + self._get_answerdata_index()
-                value = int.from_bytes(recv_data[data_index:data_index+1], "little")
+                value = int.from_bytes(recv[data_index:data_index+1], "little")
                 #if i//2==0, bit value is 4th bit
                 if(i%2==0):
                     bitvalue = 1 if value & (1<<4) else 0
@@ -508,7 +508,7 @@ class Type3E:
             data_index = self._get_answerdata_index()
             byte_range = 1
             for i in range(readsize):
-                bitvalue = int(recv_data[data_index:data_index+byte_range].decode())
+                bitvalue = int(recv[data_index:data_index+byte_range].decode())
                 bit_values.append(bitvalue)
                 data_index += byte_range
         return bit_values
@@ -523,25 +523,25 @@ class Type3E:
         """
         write_size = len(values)
 
-        command = 0x1401
+        cmd = 0x1401
         if self.plctype == const.iQR_SERIES:
-            subcommand = 0x0002
+            subcmd = 0x0002
         else:
-            subcommand = 0x0000
+            subcmd = 0x0000
         
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._make_devicedata(headdevice)
-        request_data += self._encode_value(write_size)
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._mk_dev(headdevice)
+        req += self._encode(write_size)
         for value in values:
-            request_data += self._encode_value(value, sfmt="h")
-        send_data = self._make_senddata(request_data)
+            req += self._encode(value, sfmt="h")
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
 
         return None
 
@@ -559,16 +559,16 @@ class Type3E:
             if not (value == 0 or value == 1): 
                 raise ValueError("Each value must be 0 or 1. 0 is OFF, 1 is ON.")
 
-        command = 0x1401
+        cmd = 0x1401
         if self.plctype == const.iQR_SERIES:
-            subcommand = 0x0003
+            subcmd = 0x0003
         else:
-            subcommand = 0x0001
+            subcmd = 0x0001
         
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._make_devicedata(headdevice)
-        request_data += self._encode_value(write_size)
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._mk_dev(headdevice)
+        req += self._encode(write_size)
         if self.commtype == const.COMMTYPE_BINARY:
             #evary value is 0 or 1.
             #Even index's value turns on or off 4th bit, odd index's value turns on or off 0th bit.
@@ -583,17 +583,17 @@ class Type3E:
                 bit_value = value << bit_index
                 #Take or of send data
                 bit_data[value_index] |= bit_value
-            request_data += bytes(bit_data)
+            req += bytes(bit_data)
         else:
             for value in values:
-                request_data += str(value).encode()
-        send_data = self._make_senddata(request_data)
+                req += str(value).encode()
+        send_data = self._make_senddata(req)
                     
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
 
         return None
 
@@ -610,39 +610,39 @@ class Type3E:
             dword_values(list[int]):    dword units value list
 
         """
-        command = 0x0403
+        cmd = 0x0403
         if self.plctype == const.iQR_SERIES:
-            subcommand = 0x0002
+            subcmd = 0x0002
         else:
-            subcommand = 0x0000
+            subcmd = 0x0000
 
         word_size = len(word_devices)
         dword_size = len(dword_devices)
         
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(word_size, mode="byte")
-        request_data += self._encode_value(dword_size, mode="byte")
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._encode(word_size, sfmt="B")
+        req += self._encode(dword_size, sfmt="B")
         for word_device in word_devices:
-            request_data += self._make_devicedata(word_device)
+            req += self._mk_dev(word_device)
         for dword_device in dword_devices:
-            request_data += self._make_devicedata(dword_device)        
-        send_data = self._make_senddata(request_data)
+            req += self._mk_dev(dword_device)        
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
         data_index = self._get_answerdata_index()
         word_values= []
         dword_values= []
         for word_device in word_devices:
-            wordvalue = self._decode_value(recv_data[data_index:data_index+self._wordsize], mode="short", isSigned=True)
+            wordvalue = self._decode(recv[data_index:data_index+self._wordsize], sfmt="h")
             word_values.append(wordvalue)
             data_index += self._wordsize
         for dword_device in dword_devices:
-            dwordvalue = self._decode_value(recv_data[data_index:data_index+self._wordsize*2], mode="long", isSigned=True)
+            dwordvalue = self._decode(recv[data_index:data_index+self._wordsize*2], sfmt="l")
             dword_values.append(dwordvalue)
             data_index += self._wordsize*2
         return word_values, dword_values
@@ -666,29 +666,29 @@ class Type3E:
         word_size = len(word_devices)
         dword_size = len(dword_devices)
 
-        command = 0x1402
+        cmd = 0x1402
         if self.plctype == const.iQR_SERIES:
-            subcommand = 0x0002
+            subcmd = 0x0002
         else:
-            subcommand = 0x0000
+            subcmd = 0x0000
         
-        request_data = bytes()
-        request_data += self._make_commanddata(cmd, subcmd)
-        request_data += self._encode_value(word_size, sfmt="B")
-        request_data += self._encode_value(dword_size, sfmt="B")
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._encode(word_size, sfmt="B")
+        req += self._encode(dword_size, sfmt="B")
         for word_device, word_value in zip(word_devices, word_values):
-            request_data += self._make_devicedata(word_device)
-            request_data += self._encode_value(word_value, sfmt="h")
+            req += self._mk_dev(word_device)
+            req += self._encode(word_value, sfmt="h")
         for dword_device, dword_value in zip(dword_devices, dword_values):
-            request_data += self._make_devicedata(dword_device)   
-            request_data += self._encode_value(dword_value, sfmt="l")     
-        send_data = self._make_senddata(request_data)
+            req += self._mk_dev(dword_device)   
+            req += self._encode(dword_value, sfmt="l")     
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
         return None
 
     def randomwrite_bitunits(self, bit_devices, values):
@@ -707,29 +707,29 @@ class Type3E:
             if not (value == 0 or value == 1): 
                 raise ValueError("Each value must be 0 or 1. 0 is OFF, 1 is ON.")
 
-        command = 0x1402
+        cmd = 0x1402
         if self.plctype == const.iQR_SERIES:
-            subcommand = 0x0003
+            subcmd = 0x0003
         else:
-            subcommand = 0x0001
+            subcmd = 0x0001
         
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(write_size, sfmt="B")
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._encode(write_size, sfmt="B")
         for bit_device, value in zip(bit_devices, values):
-            request_data += self._make_devicedata(bit_device)
+            req += self._mk_dev(bit_device)
             #byte value for iQ-R requires 2 byte data
             if self.plctype == const.iQR_SERIES:
-                request_data += self._encode_value(value, sfmt="h")
+                req += self._encode(value, sfmt="h")
             else:
-                request_data += self._encode_value(value, sfmt="b")
-        send_data = self._make_senddata(request_data)
+                req += self._encode(value, sfmt="b")
+        send_data = self._make_senddata(req)
                     
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
 
         return None
 
@@ -746,46 +746,46 @@ class Type3E:
         if not (force_exec is True or force_exec is False):
             raise ValueError("force_exec must be True or False")
 
-        command = 0x1001
-        subcommand = 0x0000
+        cmd = 0x1001
+        subcmd = 0x0000
 
         if force_exec:
             mode = 0x0003
         else:
             mode = 0x0001
           
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(mode, sfmt="H")
-        request_data += self._encode_value(clear_mode, sfmt="B")
-        request_data += self._encode_value(0, sfmt="B")
-        send_data = self._make_senddata(request_data)
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._encode(mode, sfmt="H")
+        req += self._encode(clear_mode, sfmt="B")
+        req += self._encode(0, sfmt="B")
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
         return None
 
     def remote_stop(self):
         """ Stop remotely.
 
         """
-        command = 0x1002
-        subcommand = 0x0000
+        cmd = 0x1002
+        subcmd = 0x0000
 
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(0x0001, sfmt="H") #fixed value
-        send_data = self._make_senddata(request_data)
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._encode(0x0001, sfmt="H") #fixed value
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
         return None
 
     def remote_pause(self, force_exec=False):
@@ -798,60 +798,60 @@ class Type3E:
         if not (force_exec is True or force_exec is False):
             raise ValueError("force_exec must be True or False")
 
-        command = 0x1003
-        subcommand = 0x0000
+        cmd = 0x1003
+        subcmd = 0x0000
 
         if force_exec:
             mode = 0x0003
         else:
             mode = 0x0001
           
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(mode, sfmt="H")
-        send_data = self._make_senddata(request_data)
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._encode(mode, sfmt="H")
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
         return None
 
     def remote_latchclear(self):
         """Clear latch remotely.
-        PLC must be stop when use this command.
+        PLC must be stop when use this cmd.
         """
 
-        command = 0x1005
-        subcommand = 0x0000
+        cmd = 0x1005
+        subcmd = 0x0000
 
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(0x0001, sfmt="H") #fixed value 
-        send_data = self._make_senddata(request_data)
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._encode(0x0001, sfmt="H") #fixed value 
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
 
         return None
 
     def remote_reset(self):
         """Reset remotely.
-        PLC must be stop when use this command.
+        PLC must be stop when use this cmd.
         
         """
 
-        command = 0x1006
-        subcommand = 0x0000
+        cmd = 0x1006
+        subcmd = 0x0000
 
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(0x0001, sfmt="H") #fixed value
-        send_data = self._make_senddata(request_data)
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._encode(0x0001, sfmt="H") #fixed value
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
@@ -859,8 +859,8 @@ class Type3E:
         #set time out 1 seconds. Because remote reset may not return data since clone socket
         try:
             self._sock.settimeout(1)
-            recv_data = self._recv()
-            self._check_cmdanswer(recv_data)
+            recv = self._recv()
+            self._check_cmdanswer(recv)
         except:
             self._is_connected = False
             # after wait 1 sec
@@ -878,29 +878,29 @@ class Type3E:
 
         """
 
-        command = 0x0101
-        subcommand = 0x0000
+        cmd = 0x0101
+        subcmd = 0x0000
 
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        send_data = self._make_senddata(request_data)
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
         data_index = self._get_answerdata_index()
         cpu_name_length = 16
         if self.commtype == const.COMMTYPE_BINARY:
-            cpu_type = recv_data[data_index:data_index+cpu_name_length].decode()
+            cpu_type = recv[data_index:data_index+cpu_name_length].decode()
             cpu_type = cpu_type.replace("\x20", "")
-            cpu_code = int.from_bytes(recv_data[data_index+cpu_name_length:], "little")
+            cpu_code = int.from_bytes(recv[data_index+cpu_name_length:], "little")
             cpu_code = format(cpu_code, "x").rjust(4, "0")
         else:
-            cpu_type = recv_data[data_index:data_index+cpu_name_length].decode()
+            cpu_type = recv[data_index:data_index+cpu_name_length].decode()
             cpu_type = cpu_type.replace("\x20", "")
-            cpu_code = recv_data[data_index+cpu_name_length:].decode()
+            cpu_code = recv[data_index+cpu_name_length:].decode()
         return cpu_type, cpu_code
 
     def remote_unlock(self, password="", request_input=False):
@@ -923,19 +923,19 @@ class Type3E:
                 raise ValueError("password length must be 4")
 
 
-        command = 0x1630
-        subcommand = 0x0000
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(len(password), sfmt="H") 
-        request_data += password.encode()
+        cmd = 0x1630
+        subcmd = 0x0000
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._encode(len(password), sfmt="H") 
+        req += password.encode()
 
-        send_data = self._make_senddata(request_data)
+        send_data = self._make_senddata(req)
 
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
         return None
 
     def remote_lock(self, password="", request_input=False):
@@ -957,21 +957,21 @@ class Type3E:
             if not (4 == len(password)):
                 raise ValueError("password length must be 4")
 
-        command = 0x1631
-        subcommand = 0x0000
+        cmd = 0x1631
+        subcmd = 0x0000
 
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(len(password), sfmt="H") 
-        request_data += password.encode()
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._encode(len(password), sfmt="H") 
+        req += password.encode()
 
-        send_data = self._make_senddata(request_data)
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
         return None
 
     def echo_test(self, echo_data):
@@ -991,24 +991,24 @@ class Type3E:
         if not ( 1 <= len(echo_data) <= 960):
             raise ValueError("echo_data length must be from 1 to 960")
 
-        command = 0x0619
-        subcommand = 0x0000
+        cmd = 0x0619
+        subcmd = 0x0000
 
-        request_data = bytes()
-        request_data += self._make_commanddata(command, subcommand)
-        request_data += self._encode_value(len(echo_data), sfmt="H") 
-        request_data += echo_data.encode()
+        req = bytes()
+        req += self._mk_cmd(cmd, subcmd)
+        req += self._encode(len(echo_data), sfmt="H") 
+        req += echo_data.encode()
 
-        send_data = self._make_senddata(request_data)
+        send_data = self._make_senddata(req)
 
         #send mc data
         self._send(send_data)
         #reciev mc data
-        recv_data = self._recv()
-        self._check_cmdanswer(recv_data)
+        recv = self._recv()
+        self._check_cmdanswer(recv)
 
         data_index = self._get_answerdata_index()
 
-        answer_len = self._decode_value(recv_data[data_index:data_index+self._wordsize], mode="short") 
-        answer = recv_data[data_index+self._wordsize:].decode()
+        answer_len = self._decode(recv[data_index:data_index+self._wordsize], sfmt="H") 
+        answer = recv[data_index+self._wordsize:].decode()
         return answer_len, answer
