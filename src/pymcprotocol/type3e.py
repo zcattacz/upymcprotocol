@@ -3,7 +3,7 @@
 
 import re
 import time
-import socket
+import usocket
 import binascii
 from . import mcprotocolerror
 from . import mcprotocolconst as const
@@ -108,20 +108,26 @@ class Type3E:
         """
         self._debug = debug
 
-    def connect(self, ip, port):
+    def connect(self, host, port):
         """Connect to PLC
 
         Args:
-            ip (str):       ip address(IPV4) to connect PLC
+            host (str):       hostname/ip to connect PLC
             port (int):     port number of connect PLC   
             timeout (float):  timeout second in communication
 
         """
-        self._ip = ip
+        self._host = host
         self._port = port
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            ai = usocket.getaddrinfo(host, port, 0, usocket.SOCK_STREAM)[0]
+            # ret [(family, type, proto, cannoname, socketaddr:bytes)], see p26
+        except Exception as ex:
+            print("connect() error")
+            raise ex
+        self._sock = usocket.socket(ai[0], usocket.SOCK_STREAM)
         self._sock.settimeout(self.soc_timeout)
-        self._sock.connect((ip, port))
+        self._sock.connect(ai[-1])
         self._is_connected = True
 
     def close(self):
@@ -859,7 +865,7 @@ class Type3E:
             # after wait 1 sec
             # try reconnect
             time.sleep(1)
-            self.connect(self._ip, self._port)
+            self.connect(self._host, self._port)
         return None
 
     def read_cputype(self):
